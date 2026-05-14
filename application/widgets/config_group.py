@@ -26,7 +26,7 @@ class ConfigGroup(QtWidgets.QGroupBox):
         self.sample_rate = QtWidgets.QComboBox(self)
         self.sample_rate.addItems([str(it.value) for it in DAQSampleRate])
         self.sample_rate.currentIndexChanged.connect(self.set_sample_rate)
-        self.sample_rate.setCurrentText(str(DAQSampleRate.SampleRate500.value))
+        self.sample_rate.setCurrentText(str(State.sample_rate.value))
         grid_layout2.addWidget(
             QtWidgets.QLabel("Sample Rate, Hz:", self), 0, 0, alignment=QtCore.Qt.AlignmentFlag.AlignRight
         )
@@ -35,7 +35,7 @@ class ConfigGroup(QtWidgets.QGroupBox):
         self.voltage = QtWidgets.QComboBox(self)
         self.voltage.addItems([str(it.name) for it in DAQVoltage])
         self.voltage.currentIndexChanged.connect(self.set_voltage)
-        self.voltage.setCurrentText(str(DAQVoltage.Voltage5V.name))
+        self.voltage.setCurrentText(str(State.voltage.name))
         grid_layout2.addWidget(
             QtWidgets.QLabel("Voltage, V:", self), 1, 0, alignment=QtCore.Qt.AlignmentFlag.AlignRight
         )
@@ -51,7 +51,9 @@ class ConfigGroup(QtWidgets.QGroupBox):
         State.sample_rate = DAQSampleRate.get_by_index(index)
         if State.read_elements_count.value > State.sample_rate.value:
             State.read_elements_count.value = State.sample_rate.value
+        State.save_settings()
 
     @staticmethod
     def set_voltage(index):
         State.voltage = DAQVoltage.get_by_index(index)
+        State.save_settings()

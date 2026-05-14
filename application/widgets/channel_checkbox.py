@@ -9,9 +9,13 @@ class ChannelCheckBox(QtWidgets.QCheckBox):
         self.channel = channel
         self.setText(f"AI{channel}")
         self.stateChanged.connect(self.set_channel)
+        self.setChecked(channel in State.selected_channels)
 
     def set_channel(self, state):
         if state == QtCore.Qt.CheckState.Checked:
-            State.selected_channels.append(self.channel)
+            if self.channel not in State.selected_channels:
+                State.selected_channels.append(self.channel)
         else:
-            State.selected_channels.remove(self.channel)
+            if self.channel in State.selected_channels:
+                State.selected_channels.remove(self.channel)
+        State.save_settings()

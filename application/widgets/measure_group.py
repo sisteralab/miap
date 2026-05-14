@@ -31,6 +31,8 @@ class MeasureThread(QtCore.QThread):
         self.voltage = State.voltage
         self.is_average = State.is_average
         self.selected_channels = sorted(State.selected_channels)
+        if State.plot_mode == "channels":
+            self.selected_channels = sorted(set(self.selected_channels) | {State.plot_x_channel, State.plot_y_channel})
 
     def create_measure(self):
         if self.store_data:
@@ -136,6 +138,34 @@ class MeasureGroup(QtWidgets.QGroupBox):
         self.plot_window.valueChanged.connect(self.set_plot_window)
         self.plot_window.setHidden(not State.is_plot_data)
 
+        self.plot_mode_label = QtWidgets.QLabel("Plot mode:", self)
+        self.plot_mode_label.setHidden(not State.is_plot_data)
+
+        self.plot_mode = QtWidgets.QComboBox(self)
+        self.plot_mode.addItem("ADC over time", "time")
+        self.plot_mode.addItem("Channel Y over X", "channels")
+        self.plot_mode.setCurrentIndex(0 if State.plot_mode == "time" else 1)
+        self.plot_mode.currentIndexChanged.connect(self.set_plot_mode)
+        self.plot_mode.setHidden(not State.is_plot_data)
+
+        self.plot_x_channel_label = QtWidgets.QLabel("X channel:", self)
+        self.plot_x_channel_label.setHidden(not State.is_plot_data or State.plot_mode != "channels")
+
+        self.plot_x_channel = QtWidgets.QComboBox(self)
+        self.plot_x_channel.addItems([f"AI{i}" for i in range(1, 9)])
+        self.plot_x_channel.setCurrentIndex(State.plot_x_channel - 1)
+        self.plot_x_channel.currentIndexChanged.connect(self.set_plot_x_channel)
+        self.plot_x_channel.setHidden(not State.is_plot_data or State.plot_mode != "channels")
+
+        self.plot_y_channel_label = QtWidgets.QLabel("Y channel:", self)
+        self.plot_y_channel_label.setHidden(not State.is_plot_data or State.plot_mode != "channels")
+
+        self.plot_y_channel = QtWidgets.QComboBox(self)
+        self.plot_y_channel.addItems([f"AI{i}" for i in range(1, 9)])
+        self.plot_y_channel.setCurrentIndex(State.plot_y_channel - 1)
+        self.plot_y_channel.currentIndexChanged.connect(self.set_plot_y_channel)
+        self.plot_y_channel.setHidden(not State.is_plot_data or State.plot_mode != "channels")
+
         self.read_elements = QtWidgets.QSpinBox(self)
         self.read_elements.setRange(1, 10000)
         self.read_elements.setValue(State.read_elements_count.value)
@@ -162,6 +192,9 @@ class MeasureGroup(QtWidgets.QGroupBox):
         flayout.addRow(self.store_data)
         flayout.addRow(self.is_plot_data)
         flayout.addRow(self.plot_window_label, self.plot_window)
+        flayout.addRow(self.plot_mode_label, self.plot_mode)
+        flayout.addRow(self.plot_x_channel_label, self.plot_x_channel)
+        flayout.addRow(self.plot_y_channel_label, self.plot_y_channel)
 
         self.btn_start = QtWidgets.QPushButton("Start", self)
         self.btn_start.clicked.connect(self.start_measure)
@@ -176,7 +209,10 @@ class MeasureGroup(QtWidgets.QGroupBox):
         self.setLayout(vlayout)
 
     def start_measure(self):
-        if not len(State.selected_channels):
+        if State.plot_mode == "channels" and State.plot_x_channel == State.plot_y_channel:
+            logger.warning("Select different X and Y channels!")
+            return
+        if State.plot_mode == "time" and not len(State.selected_channels):
             logger.warning("You have to select at least one channel!")
             return
         self.parent().plot_widget.clear()
@@ -210,20 +246,58 @@ class MeasureGroup(QtWidgets.QGroupBox):
     @staticmethod
     def set_duration(value):
         State.duration = int(value)
+        State.save_settings()
 
     def set_is_plot_data(self, state):
         if state == QtCore.Qt.CheckState.Checked:
-            self.plot_window.setHidden(False)
-            self.plot_window_label.setHidden(False)
+            self.set_plot_controls_hidden(False)
             State.is_plot_data = True
+            State.save_settings()
             return
-        self.plot_window.setHidden(True)
-        self.plot_window_label.setHidden(True)
+        self.set_plot_controls_hidden(True)
         State.is_plot_data = False
+        State.save_settings()
+
+    def set_plot_controls_hidden(self, hidden: bool):
+        self.plot_window.setHidden(hidden)
+        self.plot_window_label.setHidden(hidden)
+        self.plot_mode.setHidden(hidden)
+        self.plot_mode_label.setHidden(hidden)
+
+        channel_controls_hidden = hidden or State.plot_mode != "channels"
+        self.plot_x_channel.setHidden(channel_controls_hidden)
+        self.plot_x_channel_label.setHidden(channel_controls_hidden)
+        self.plot_y_channel.setHidden(channel_controls_hidden)
+        self.plot_y_channel_label.setHidden(channel_controls_hidden)
 
     @staticmethod
     def set_plot_window(value):
         State.plot_window = int(value)
+        State.save_settings()
+
+    def set_plot_mode(self, index):
+        State.plot_mode = self.plot_mode.itemData(index)
+        State.save_settings()
+        self.set_plot_controls_hidden(not self.is_plot_data.isChecked())
+        self.parent().plot_widget.clear()
+        if State.plot_mode == "channels":
+            self.parent().plot_widget.set_channels_mode(State.plot_x_channel, State.plot_y_channel)
+            return
+        self.parent().plot_widget.set_time_mode()
+
+    def set_plot_x_channel(self, index):
+        State.plot_x_channel = index + 1
+        State.save_settings()
+        if State.plot_mode == "channels":
+            self.parent().plot_widget.clear()
+            self.parent().plot_widget.set_channels_mode(State.plot_x_channel, State.plot_y_channel)
+
+    def set_plot_y_channel(self, index):
+        State.plot_y_channel = index + 1
+        State.save_settings()
+        if State.plot_mode == "channels":
+            self.parent().plot_widget.clear()
+            self.parent().plot_widget.set_channels_mode(State.plot_x_channel, State.plot_y_channel)
 
     @staticmethod
     def set_read_elements(value):
@@ -233,11 +307,13 @@ class MeasureGroup(QtWidgets.QGroupBox):
     def set_average(state):
         value = state == QtCore.Qt.CheckState.Checked
         State.is_average = value
+        State.save_settings()
 
     @staticmethod
     def set_store_data(state):
         value = state == QtCore.Qt.CheckState.Checked
         State.store_data = value
+        State.save_settings()
 
     @staticmethod
     def set_log(log: Dict):
